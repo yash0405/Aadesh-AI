@@ -1,0 +1,58 @@
+{
+  "case_title": "S. Nagaraj (dead) by LRs. & Ors. v. B.R. Vasudeva Murthy & Ors.",
+  "court": "Supreme Court of India",
+  "judgment_date": "2010-02-08",
+  "case_number": "Civil Appeal No. 3038 of 2007",
+  "other_connected_matters": [
+    "Civil Appeal Nos. 3037/2007, 3049/2007, 3040-3047/2007, 3050/2007, 3941-3953/2007",
+    "Civil Appeal Nos. 1477, 1478, 1479 of 2010"
+  ],
+  "parties": {
+    "appellants": "S. Nagaraj (dead) by LRs. & Ors.",
+    "respondents": "B.R. Vasudeva Murthy & Ors. Etc. Etc."
+  },
+  "judgment_summary": "The Supreme Court set aside the common judgment dated 22.12.2006 of the Karnataka High Court and allowed the writ petitions filed before the High Court. It also set aside the Minister's order dated 22.12.2003 that had directed cancellation of the grant, restoration of 182 vacant sites to the Inamdars, and related compensation directions.",
+  "key_directions": [
+    "The impugned common judgment dated 22.12.2006 of the Karnataka High Court was set aside.",
+    "The writ petitions filed before the Karnataka High Court were allowed.",
+    "The Minister's order dated 22.12.2003 directing restoration of vacant 182 sites to the Inamdars was set aside.",
+    "The directions to hand over civic amenity sites and acquire Ring Road land for compensation were set aside."
+  ],
+  "responsible_authority": [
+    "Government of Karnataka",
+    "Revenue Department",
+    "Bangalore Development Authority"
+  ],
+  "action_type": "Judgment outcome finalized; prior restoration/cancellation directions set aside",
+  "appeal_timeline": {
+    "type": "inferred",
+    "value_days": 90,
+    "deadline_date": "2010-05-09",
+    "label": "Estimated appeal deadline for dashboard countdown",
+    "note": "No explicit appeal timeline is stated in the judgment; this is a rule-based inferred timeline for demo purposes."
+  },
+  "verification_status": {
+    "current_state": "draft",
+    "human_review_required": true,
+    "publishable_to_dashboard": false
+  },
+  "confidence": {
+    "case_title": 99,
+    "court": 99,
+    "judgment_date": 99,
+    "case_number": 98,
+    "parties": 99,
+    "judgment_summary": 95,
+    "key_directions": 95,
+    "responsible_authority": 90,
+    "action_type": 92,
+    "appeal_timeline": 70
+  },
+  "source_highlights": {
+    "case_title": "Page 1, heading",
+    "judgment_date": "Page 59, signature block",
+    "judgment_summary": "Pages 58-59, final operative paragraphs",
+    "key_directions": "Pages 58-59, paragraphs 40-41",
+    "responsible_authority": "Pages 2-10 and 57-58"
+  }
+}
