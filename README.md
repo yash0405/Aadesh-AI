@@ -1,148 +1,170 @@
 # Aadesh AI — CCMS Court Judgment Action Planner
 
-> **Real flow:**  PDF → Extract Text → LLM Fields → LLM Action Plan → HITL Verify → Dashboard
+> Turn a court judgment PDF into a structured, human-verifiable action plan for the **Court Case Monitoring System (CCMS)**.
 
-## 30-second demo
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py          # full UI
-python demo_pipeline.py       # headless pipeline test
+```
+PDF ─► Extract Text ─► LLM Fields ─► LLM Action Plan ─► HITL Verify ─► Dashboard
 ```
 
-## Folder structure
+A 1-click pipeline + court-themed Streamlit UI that lets a human reviewer verify every extracted field against the source PDF (with page-level highlights and confidence badges) before publishing to the CCMS dashboard.
+
+---
+
+## Quick start
+
+```bash
+# 1. Set up environment
+python -m venv myenv
+source myenv/bin/activate          # Windows: myenv\Scripts\activate
+pip install -r requirements.txt
+
+# 2. Run the Streamlit UI
+streamlit run app.py
+
+# 3. Or run the pipeline headless (no UI)
+python demo_pipeline.py
+python demo_pipeline.py path/to/your-judgment.pdf
+```
+
+The app opens at <http://localhost:8501>.
+
+---
+
+## Project layout
 
 ```
 .
-├── app.py                    # Streamlit 3-step UI (Review → Plan → Dashboard)
-├── pipeline/                 # AI Processing Pipeline
-│   ├── __init__.py           # package; exposes extract() for app.py
-│   ├── pdf_processor.py      # [1] PyMuPDF → raw text
-│   ├── llm_extractor.py      # [2] mock LLM → structured field dict
-│   ├── llm_planner.py        # [3] mock LLM → action plan JSON
-│   └── main_pipeline.py      # [4] orchestrator → ExtractionResult
-├── utils/
-│   ├── __init__.py           # re-exports all original utils (backward-compat)
-│   └── highlights.py         # generate_highlights(result, selected_field)
-├── models.py                 # Pydantic schema: JudgmentField, ExtractionResult
-├── static/
-│   └── manual_fallback.json  # canonical S. Nagaraj JSON (fallback if no PDF)
+├── app.py                       # Streamlit 3-step UI (Review → Plan → Dashboard)
+├── demo_pipeline.py             # Headless end-to-end pipeline runner
+├── models.py                    # Pydantic schema (JudgmentField, SourceCoord, ExtractionResult)
+│
+├── pipeline/                    # AI processing pipeline (package)
+│   ├── __init__.py              #   exposes run_pipeline() and extract()
+│   ├── pdf_processor.py         #   [1] PyMuPDF → raw text
+│   ├── llm_extractor.py         #   [2] LLM (mock) → structured field dict
+│   ├── llm_planner.py           #   [3] LLM (mock) → action plan dict
+│   └── main_pipeline.py         #   [4] orchestrator + Pydantic validation
+│
+├── utils/                       # UI helpers (package)
+│   ├── __init__.py              #   re-exports highlight + badge helpers
+│   └── highlights.py            #   generate_highlights(result, selected_field)
+│
 ├── data/
-│   └── nagaraj_judgment.pdf  # demo judgment PDF
-├── demo_pipeline.py          # headless end-to-end test
+│   ├── SC-Judgement.pdf         #   demo judgment PDF
+│   ├── nagaraj_judgment.pdf     #   alternate demo PDF
+│   └── judgment_data.json       #   canonical fallback payload
+│
+├── static/
+│   └── manual_fallback.json     #   fallback JSON when no PDF is provided
+│
 └── requirements.txt
 ```
+
+> Note: `pipeline.py`, `extractor.py`, and `utils.py` at the repo root are the **legacy single-file modules** kept for backward compatibility. The current implementation lives in the `pipeline/` and `utils/` packages.
+
+---
 
 ## Pipeline architecture
 
 ```
-data/nagaraj_judgment.pdf
+data/SC-Judgement.pdf
   │
-  │  [1] pipeline/pdf_processor.py  (PyMuPDF)
+  │  [1] pipeline/pdf_processor.py     (PyMuPDF)
   ▼
   Raw text
   │
-  │  [2] pipeline/llm_extractor.py  ("LLM 1 — extract")
+  │  [2] pipeline/llm_extractor.py     ("LLM 1 — extract")
   ▼
-  Field dict  { case_title, court, date, key_directives, … + _confidence }
+  Field dict  { case_title, court, judgment_date, key_directions, … + _confidence }
   │
-  │  [3] pipeline/llm_planner.py    ("LLM 2 — plan")
+  │  [3] pipeline/llm_planner.py       ("LLM 2 — plan")
   ▼
-  Action plan { priority, deadline, next_steps, department_owner, … }
+  Action plan { priority, deadline_date, next_steps, department_owner, risk_level, … }
   │
-  │  [4] pipeline/main_pipeline.py  (Pydantic validation + coord enrichment)
+  │  [4] pipeline/main_pipeline.py     (Pydantic validation + coord enrichment)
   ▼
   ExtractionResult  ──►  app.py  ──►  HITL verify  ──►  CCMS Dashboard
 ```
 
-## Replacing the mock LLMs
-
-Both `llm_extractor.extract_fields()` and `llm_planner.generate_action_plan()`
-are single functions with clean signatures.  Drop in a real LLM call (Claude /
-GPT / Gemini) that returns the same dict shape — nothing else needs to change.
-
-The Pydantic re-validation in `main_pipeline._build_result()` enforces the
-schema contract and will surface any field mismatches immediately.
-
-## Pydantic contract
+The pipeline has a single public entry point:
 
 ```python
+from pipeline import run_pipeline   # or: from pipeline import extract
+
+result = run_pipeline("data/SC-Judgement.pdf")
+print(result.action_plan["priority"])      # → "HIGH"
+print(result.confidence_map())             # → {"case_title": 95, ...}
+```
+
+---
+
+## Data contract (Pydantic)
+
+Every extracted attribute is a `JudgmentField` with provenance:
+
+```python
+class SourceCoord(BaseModel):
+    page: int                            # 0-indexed PDF page
+    x: float; y: float
+    width: float; height: float
+    note: str | None
+
 class JudgmentField(BaseModel):
     name: str
-    value: Any                      # str | list[str] | int
-    confidence: int                 # 0–100
+    value: Any                           # str | list[str] | int
+    confidence: int                      # 0–100
     source_coords: list[SourceCoord]
     is_inferred: bool = False
 
 class ExtractionResult(BaseModel):
     fields: list[JudgmentField]
-    action_plan: dict | None = None  # populated by llm_planner
+    action_plan: dict | None = None      # populated by llm_planner
 ```
 
+`SourceCoord` rectangles drive the yellow highlight overlays in the PDF viewer and let the UI jump to the page that backs each field.
 
-A 1-click pipeline that turns a court judgment PDF into a structured,
-human-verifiable action plan for the **Court Case Monitoring System (CCMS)**.
+---
 
-```
-PDF  ─►  pipeline.extract()  ─►  ExtractionResult (Pydantic)
-                                          │
-                                          ▼
-                          Streamlit review UI  (highlight + edit)
-                                          │
-                                          ▼
-                              Approved Action Plan  ─►  CCMS Dashboard
-```
-
-## Files
-
-| File              | Role                                                                |
-| ----------------- | ------------------------------------------------------------------- |
-| `app.py`          | Streamlit UI (3-step stepper: Review → Plan → Dashboard)            |
-| `pipeline.py`     | `extract(pdf_path)` — single entry point for the whole pipeline     |
-| `extractor.py`    | Mock LLM that returns the canonical S. Nagaraj judgment payload     |
-| `models.py`       | Pydantic schema: `JudgmentField`, `SourceCoord`, `ExtractionResult` |
-| `utils.py`        | Confidence badges + PDF highlight-overlay helpers                   |
-| `SC-Judgement.pdf`| The demo judgment used by the extractor                             |
-
-## Run
-
-```bash
-python -m venv myenv && source myenv/bin/activate
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-## Pipeline contract
-
-Each extracted attribute is a `JudgmentField`:
-
-```python
-class JudgmentField(BaseModel):
-    name: str
-    value: Any                      # str | list[str] | int
-    confidence: int                 # 0–100
-    source_coords: list[SourceCoord]
-    is_inferred: bool = False
-```
-
-`SourceCoord` is a `(page, x, y, width, height, note)` rectangle — the UI uses
-it to render yellow highlight boxes and jump the PDF viewer to the right page.
-
-## Demo flow
+## Streamlit UI flow
 
 1. **Step 1 — Review & Verify**
-   - The pipeline runs automatically on first load (cached).
-   - Click **🔁 Re-extract from PDF** at any time to re-run `pipeline.extract()`.
-   - Each field has a **📑 p.N** button — clicking it overlays the field's
-     `source_coords` on the PDF and scrolls to that page.
-   - Confidence badges (🟢 ≥90 / 🟡 ≥70 / 🔴 <70) come from `utils.confidence_badge`.
-   - Edit any field, then **✅ Approve & Continue**.
-2. **Step 2 — Action Plan** — generated table of directions + appeal deadline.
-3. **Step 3 — CCMS Dashboard** — published, human-verified record.
+   - The pipeline runs on first load (results are cached).
+   - Click **🔁 Re-extract from PDF** to re-run `run_pipeline()`.
+   - Each field exposes a **📑 p.N** button that overlays its `source_coords` on the PDF and scrolls to that page.
+   - Confidence badges: 🟢 ≥90  /  🟡 ≥70  /  🔴 <70.
+   - Edit any field inline, then **✅ Approve & Continue**.
+2. **Step 2 — Action Plan** — table of directions, department owner, priority, risk, and appeal deadline.
+3. **Step 3 — CCMS Dashboard** — the published, human-verified record.
 
-## Replacing the mock extractor
+---
 
-Swap `extractor.generate_json` with a real LLM call (Claude / GPT / Gemini)
-that returns the same `ExtractionResult` shape — nothing else in the app
-needs to change. The Pydantic re-validation in `pipeline.extract` enforces
-the contract.
+## Replacing the mock LLMs
+
+Both LLM stages are isolated single functions with stable signatures:
+
+| Stage   | Function                                                  | Drop-in replacement |
+| ------- | --------------------------------------------------------- | ------------------- |
+| Extract | `pipeline.llm_extractor.extract_fields(text) -> dict`     | Real call to Claude / GPT / Gemini returning the same flat dict shape (including `_confidence`). |
+| Plan    | `pipeline.llm_planner.generate_action_plan(fields) -> dict` | Real planning LLM or rules engine returning the same action-plan shape. |
+
+The Pydantic re-validation in [pipeline/main_pipeline.py](pipeline/main_pipeline.py) (`_build_result()`) enforces the schema contract, so any drift in the new LLM output is caught immediately rather than silently breaking the UI.
+
+---
+
+## Requirements
+
+See [requirements.txt](requirements.txt):
+
+- `streamlit` — UI framework
+- `streamlit-pdf-viewer` — embedded PDF viewer with highlight overlays
+- `pymupdf` — PDF text extraction
+- `pydantic` — schema validation
+- `pandas` — action-plan tables
+
+Python 3.10+ recommended.
+
+---
+
+## License
+
+Internal MVP. See repository owner for licensing terms.

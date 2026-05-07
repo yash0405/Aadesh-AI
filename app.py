@@ -70,8 +70,23 @@ header[data-testid="stHeader"], footer, #MainMenu,
 
 /* the page body — scrolls vertically below the fixed header + stepper */
 .main .block-container, [data-testid="stMainBlockContainer"] {
-    padding: calc(var(--header-h) + var(--stepper-h) + var(--pad-y)) var(--side-pad) calc(var(--pad-y) * 2) var(--side-pad) !important;
+    padding: calc(var(--header-h) + var(--stepper-h) + calc(var(--pad-y) * 0.2)) var(--side-pad) calc(var(--pad-y) * 2) var(--side-pad) !important;
     max-width: 100% !important;
+}
+
+/* hide empty streamlit markdown containers that hold our fixed blocks */
+div[data-testid="stMarkdownContainer"]:has(.court-header),
+div[data-testid="stMarkdownContainer"]:has(.stepper) {
+    margin: 0 !important; padding: 0 !important; min-height: 0 !important;
+}
+
+/* tightly pack the case band and the columns above it */
+[data-testid="stHorizontalBlock"]:has(.case-band) {
+    margin-top: -1rem;
+    align-items: center;
+}
+div[data-testid="element-container"]:has(.case-band) {
+    margin-bottom: 0 !important;
 }
 
 /* thin gold scrollbar on the main page */
@@ -488,6 +503,12 @@ hr { border-color: var(--line) !important; margin: .5rem 0 !important; }
 }
 [data-testid="stAlert"] { border-radius: 8px; border-left-width: 4px !important; }
 [data-testid="stCaptionContainer"] { font-family: 'Inter', sans-serif; color: var(--mute) !important; }
+.upload-btn-container {
+    position: fixed;
+    top: 36px;
+    right: max(20px, var(--side-pad));
+    z-index: 1000;
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -637,6 +658,19 @@ def highlight_button(field_name: str, label: str, key: str):
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# SIDEBAR / UPLOAD
+# ════════════════════════════════════════════════════════════════════════════
+with st.sidebar:
+    st.markdown("### 📤 New Judgment")
+    uploaded_pdf = st.file_uploader("Upload PDF to extract", type=["pdf"])
+    if uploaded_pdf:
+        st.success("PDF Uploaded! (Extraction pipeline placeholder)")
+        # In a real impl, you'd save it and call pipeline.extract()
+    st.markdown("---")
+    st.markdown("### Settings")
+    st.checkbox("Auto-scroll to highlighted text", value=True)
+
+# ════════════════════════════════════════════════════════════════════════════
 # FIXED COURT HEADER
 # ════════════════════════════════════════════════════════════════════════════
 status_pill = {
@@ -697,21 +731,31 @@ render_stepper()
 
 # ── Dynamic case-identity band (below stepper, updates per PDF) ───────────
 if judgment.get("case_title"):
-    st.markdown(
-        f"""
-<div class="case-band">
-    <div>
-        <div class="case-title">📜 {judgment['case_title']}</div>
-        <div class="case-meta">
-            {judgment.get('court', '—')} &nbsp;·&nbsp;
-            {judgment.get('case_number', '—')} &nbsp;·&nbsp;
-            Judgment dated {judgment.get('judgment_date', '—')}
+    b1, b2 = st.columns([1, 0.15])
+    with b1:
+        st.markdown(
+            f"""
+    <div class="case-band" style="margin:0;">
+        <div>
+            <div class="case-title">📜 {judgment['case_title']}</div>
+            <div class="case-meta">
+                {judgment.get('court', '—')} &nbsp;·&nbsp;
+                {judgment.get('case_number', '—')} &nbsp;·&nbsp;
+                Judgment dated {judgment.get('judgment_date', '—')}
+            </div>
         </div>
     </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
+    """,
+            unsafe_allow_html=True,
+        )
+    with b2:
+        st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
+        with st.popover("📤 Upload", use_container_width=True):
+            st.markdown("**Extract New Judgment**")
+            new_pdf = st.file_uploader("Upload PDF", type=["pdf"], label_visibility="collapsed")
+            if new_pdf:
+                st.success("PDF Uploaded! (Placeholder for pipeline)")
+    st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
 
 
 # ════════════════════════════════════════════════════════════════════════════
