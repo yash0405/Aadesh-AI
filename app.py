@@ -689,6 +689,7 @@ def highlight_button(field_name: str, label: str, key: str):
         st.session_state.highlight_page = page
         st.session_state.highlight_annotations = utils.highlight_coords(coords)
         st.session_state.highlight_field = field_name
+        st.session_state.pdf_jump_trigger = st.session_state.get("pdf_jump_trigger", 0) + 1
         st.rerun()
 
 
@@ -922,13 +923,15 @@ def render_step_1():
             st.markdown('<div class="pdf-frame">', unsafe_allow_html=True)
             # `key` forces the viewer to remount when the file changes, so the
             # new PDF is fetched instead of the previous one staying cached.
+            # Add a jump trigger to the key to force a remount when jumping to a new
+            # field on the same page, or jumping after the user manually scrolled.
             _pdf_viewer(
                 str(active_pdf),
                 width=700, height=560,
                 pages_vertical_spacing=2,
                 scroll_to_page=st.session_state.highlight_page + 1,
                 annotations=ann,
-                key=f"pdf_viewer::{active_pdf}",
+                key=f"pdf_viewer_{active_pdf}_{st.session_state.get('pdf_jump_trigger', 0)}",
             )
             st.markdown('</div>', unsafe_allow_html=True)
             cap = f"📍 Page {st.session_state.highlight_page + 1}"
