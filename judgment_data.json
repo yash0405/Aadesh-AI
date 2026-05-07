@@ -1,58 +1,61 @@
 {
-  "case_title": "S. Nagaraj (dead) by LRs. & Ors. v. B.R. Vasudeva Murthy & Ors.",
+  "case_title": "S. Nagaraj (dead) by LRs. & Ors. v. B.R. Vasudeva & Ors. Etc. Etc.",
   "court": "Supreme Court of India",
   "judgment_date": "2010-02-08",
   "case_number": "Civil Appeal No. 3038 of 2007",
   "other_connected_matters": [
     "Civil Appeal Nos. 3037/2007, 3049/2007, 3040-3047/2007, 3050/2007, 3941-3953/2007",
-    "Civil Appeal Nos. 1477, 1478, 1479 of 2010"
+    "Civil Appeal Nos. 1477-1479 of 2010",
+    "Civil Appeal No. 1480 of 2010"
   ],
   "parties": {
-    "appellants": "S. Nagaraj (dead) by LRs. & Ors.",
-    "respondents": "B.R. Vasudeva Murthy & Ors. Etc. Etc."
+    "appellants": "S. Nagaraj (dead) by LRs. & Ors., Bangalore Development Authority, Teachers' Colony Residents Association",
+    "respondents": "B.R. Vasudeva & Ors. Etc. Etc."
   },
-  "judgment_summary": "The Supreme Court set aside the common judgment dated 22.12.2006 of the Karnataka High Court and allowed the writ petitions filed before the High Court. It also set aside the Minister's order dated 22.12.2003 that had directed cancellation of the grant, restoration of 182 vacant sites to the Inamdars, and related compensation directions.",
+  "judgment_summary": "The Supreme Court set aside the Karnataka High Court's common judgment dated 22.12.2006, ruling that the previous findings of the High Court in 1998 had become final and binding. The Court held that the Inamdars had waived their rights to the land by entering into a settlement agreement and accepting compensation. Consequently, the Minister of Revenue's 2003 order, which attempted to resume land and restore vacant sites to the Inamdars, was declared to be without the authority of law and was set aside.",
   "key_directions": [
-    "The impugned common judgment dated 22.12.2006 of the Karnataka High Court was set aside.",
-    "The writ petitions filed before the Karnataka High Court were allowed.",
-    "The Minister's order dated 22.12.2003 directing restoration of vacant 182 sites to the Inamdars was set aside.",
-    "The directions to hand over civic amenity sites and acquire Ring Road land for compensation were set aside."
+    "The impugned common judgment dated 22.12.2006 of the Karnataka High Court is set aside[cite: 376].",
+    "The writ petitions filed before the Karnataka High Court (challenging the Minister's 2003 order) are allowed[cite: 376].",
+    "The directions in the Minister's order dated 22.12.2003 for cancellation of the grant to the Sangha and transfer of 182 sites to Inamdars are set aside[cite: 375].",
+    "Directions to the BDA to hand over civic amenity sites to Inamdars free of cost and pay compensation for the ring road are set aside[cite: 375].",
+    "Civil Appeal No. 1480 of 2010 is remanded to the City Civil Court, Bangalore, to decide the application for temporary injunction and the suit in accordance with this judgment[cite: 411, 412]."
   ],
   "responsible_authority": [
     "Government of Karnataka",
-    "Revenue Department",
-    "Bangalore Development Authority"
+    "Minister (Revenue), Government of Karnataka",
+    "Bangalore Development Authority (BDA)",
+    "City Civil Court, Bangalore"
   ],
-  "action_type": "Judgment outcome finalized; prior restoration/cancellation directions set aside",
+  "action_type": "Judgment outcome finalized; Minister's restoration order quashed; High Court judgment set aside",
   "appeal_timeline": {
     "type": "inferred",
     "value_days": 90,
     "deadline_date": "2010-05-09",
-    "label": "Estimated appeal deadline for dashboard countdown",
-    "note": "No explicit appeal timeline is stated in the judgment; this is a rule-based inferred timeline for demo purposes."
+    "label": "Estimated review/curative petition deadline",
+    "note": "This is a final judgment from the Supreme Court; timeline inferred for standard procedural finality/review purposes."
   },
   "verification_status": {
-    "current_state": "draft",
-    "human_review_required": true,
-    "publishable_to_dashboard": false
+    "current_state": "completed",
+    "human_review_required": false,
+    "publishable_to_dashboard": true
   },
   "confidence": {
     "case_title": 99,
     "court": 99,
     "judgment_date": 99,
-    "case_number": 98,
-    "parties": 99,
-    "judgment_summary": 95,
-    "key_directions": 95,
-    "responsible_authority": 90,
-    "action_type": 92,
+    "case_number": 99,
+    "parties": 95,
+    "judgment_summary": 98,
+    "key_directions": 99,
+    "responsible_authority": 95,
+    "action_type": 98,
     "appeal_timeline": 70
   },
   "source_highlights": {
-    "case_title": "Page 1, heading",
-    "judgment_date": "Page 59, signature block",
-    "judgment_summary": "Pages 58-59, final operative paragraphs",
-    "key_directions": "Pages 58-59, paragraphs 40-41",
-    "responsible_authority": "Pages 2-10 and 57-58"
+    "case_title": "Page 1 [cite: 3, 4, 5, 12]",
+    "judgment_date": "Page 60 [cite: 380] and Page 63 [cite: 425]",
+    "judgment_summary": "Pages 53-59 [cite: 344-375]",
+    "key_directions": "Pages 58-59 [cite: 374-377] and Pages 62-63 [cite: 411, 412]",
+    "responsible_authority": "Page 10 [cite: 76], Page 30 [cite: 202], Page 62 [cite: 412]"
   }
 }

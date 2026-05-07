@@ -138,6 +138,12 @@ def _build_result(fields_dict: dict, action_plan: dict) -> ExtractionResult:
             is_inferred=True,
             source_coords=_mk_coords("appeal_timeline"),
         ),
+        JudgmentField(
+            name="action_type",
+            value=fields_dict.get("action_type", "Judgment outcome recorded"),
+            confidence=conf.get("action_type", 85),
+            source_coords=[],
+        ),
     ]
 
     return ExtractionResult(fields=judgment_fields, action_plan=action_plan)

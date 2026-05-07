@@ -20,10 +20,6 @@ pip install -r requirements.txt
 
 # 2. Run the Streamlit UI
 streamlit run app.py
-
-# 3. Or run the pipeline headless (no UI)
-python demo_pipeline.py
-python demo_pipeline.py path/to/your-judgment.pdf
 ```
 
 The app opens at <http://localhost:8501>.
@@ -35,7 +31,6 @@ The app opens at <http://localhost:8501>.
 ```
 .
 ├── app.py                       # Streamlit 3-step UI (Review → Plan → Dashboard)
-├── demo_pipeline.py             # Headless end-to-end pipeline runner
 ├── models.py                    # Pydantic schema (JudgmentField, SourceCoord, ExtractionResult)
 │
 ├── pipeline/                    # AI processing pipeline (package)

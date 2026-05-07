@@ -1,41 +1,158 @@
 """
-Stage 2: Raw text → structured field dict  (mock LLM).
+Stage 2: Raw text → structured field dict.
 
-In production this module would POST ``raw_text`` to an LLM endpoint
-(Claude / GPT / Gemini) with a structured-output schema.  For the demo it
-returns the canonical S. Nagaraj judgment fields so the full UI pipeline
-works end-to-end without an API key.
+If the ``OPENAI_API_KEY`` environment variable is set, this calls OpenAI
+(``gpt-4o-mini`` by default, override via ``OPENAI_MODEL``) with a JSON-only
+response format and parses the result. If the key is missing, the call fails,
+or the PDF text is too short, we fall back to the canonical S. Nagaraj payload
+so the rest of the pipeline always has something to render.
 
 The function returns a **flat dict** of ``{field_name: value}`` enriched with
-``_confidence`` scores and ``_coords`` page regions.  ``main_pipeline.py``
-converts this into typed ``JudgmentField`` objects.
+``_confidence`` scores. ``main_pipeline.py`` converts this into typed
+``JudgmentField`` objects.
 """
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 _FALLBACK_PATH = Path(__file__).parent.parent / "static" / "manual_fallback.json"
 
+# Cap the prompt size so we don't blow context on a 60-page judgment.
+_MAX_CHARS = 60_000
+
+_SCHEMA_HINT = {
+    "case_title": "string",
+    "court": "string",
+    "date": "YYYY-MM-DD or original-format string",
+    "case_number": "string",
+    "petitioner": "string",
+    "respondent": "string",
+    "summary": "2-4 sentence neutral summary",
+    "key_directives": ["list of operative directions, each one sentence"],
+    "responsible_department": "comma-separated departments / authorities responsible for compliance",
+    "action_type": "short label describing the outcome (e.g. 'Judgment outcome finalized; appeal filed')",
+    "appeal_timeline": "e.g. '90 days' or 'inferred'",
+    "_confidence": {
+        "case_title": "int 0-100",
+        "court": "int",
+        "date": "int",
+        "case_number": "int",
+        "petitioner": "int",
+        "respondent": "int",
+        "summary": "int",
+        "key_directives": "int",
+        "responsible_department": "int",
+        "action_type": "int",
+        "appeal_timeline": "int",
+    },
+}
+
+_SYSTEM_PROMPT = (
+    "You are a legal-information extraction assistant for an Indian court "
+    "case monitoring system. Extract structured fields from the judgment "
+    "text the user provides. Return STRICT JSON only — no prose, no markdown "
+    "fences. Use the exact keys shown in the schema. If a field is not "
+    "present in the text, return an empty string or empty list and lower its "
+    "confidence accordingly. Confidence is an integer 0–100 reflecting how "
+    "directly the value is supported by the text."
+)
+
 
 def extract_fields(raw_text: str) -> dict:
-    """Simulate LLM field extraction from *raw_text*.
+    """Extract judgment fields from *raw_text*.
 
-    Falls back to the canonical S. Nagaraj dataset when the text is too short
-    (< 100 chars) to extract from — e.g. when no PDF is present.
-
-    Returns a flat dict with:
-    - One key per field  (string or list value)
-    - ``_confidence``   sub-dict with 0-100 scores per field
+    Calls OpenAI when ``OPENAI_API_KEY`` is set and the text is substantive;
+    otherwise returns the canonical S. Nagaraj fallback so the UI stays
+    functional during demos / offline development.
     """
     print("  🧠  LLM Extractor: analysing judgment text …")
 
-    _fallback = _load_fallback()
+    text_ok = bool(raw_text) and len(raw_text.strip()) >= 100
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
 
-    # ── Simulated LLM output ───────────────────────────────────────────────
-    # Real system: call LLM API, pass raw_text + schema, parse structured JSON.
-    # Demo:        return known-good S. Nagaraj values so the UI is always full.
-    fields: dict = {
+    if text_ok and api_key:
+        try:
+            fields = _call_openai(raw_text, api_key)
+            print(f"  ✅  OpenAI extraction succeeded ({len(raw_text):,} chars in)")
+            return fields
+        except Exception as exc:
+            print(f"  ⚠️   OpenAI call failed ({exc}) — using fallback")
+
+    if not api_key:
+        print("  ℹ️   OPENAI_API_KEY not set — using mock extraction")
+    elif not text_ok:
+        print("  ℹ️   Short / empty PDF text — using mock extraction")
+
+    return _mock_extraction()
+
+
+def _call_openai(raw_text: str, api_key: str) -> dict:
+    """Invoke OpenAI Chat Completions with JSON-only response format."""
+    from openai import OpenAI  # local import keeps module importable without the dep
+
+    client = OpenAI(api_key=api_key)
+    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+
+    snippet = raw_text.strip()
+    if len(snippet) > _MAX_CHARS:
+        # Keep head + tail — operative directions usually live near the end.
+        head = snippet[: int(_MAX_CHARS * 0.6)]
+        tail = snippet[-int(_MAX_CHARS * 0.4):]
+        snippet = f"{head}\n\n[… middle truncated for length …]\n\n{tail}"
+
+    user_prompt = (
+        "Extract the following fields from this court judgment.\n\n"
+        f"Schema (return JSON with EXACTLY these keys):\n{json.dumps(_SCHEMA_HINT, indent=2)}\n\n"
+        "Judgment text:\n"
+        "-----BEGIN JUDGMENT-----\n"
+        f"{snippet}\n"
+        "-----END JUDGMENT-----"
+    )
+
+    resp = client.chat.completions.create(
+        model=model,
+        temperature=0,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user",   "content": user_prompt},
+        ],
+    )
+    content = resp.choices[0].message.content or "{}"
+    data = json.loads(content)
+    return _coerce_shape(data)
+
+
+def _coerce_shape(data: dict) -> dict:
+    """Ensure all expected keys exist with sane defaults so the pipeline never KeyErrors."""
+    out = dict(data)
+    out.setdefault("case_title", "")
+    out.setdefault("court", "")
+    out.setdefault("date", out.get("judgment_date", ""))
+    out.setdefault("case_number", "")
+    out.setdefault("petitioner", "")
+    out.setdefault("respondent", "")
+    out.setdefault("summary", out.get("judgment_summary", ""))
+    out.setdefault("key_directives", out.get("key_directions", []) or [])
+    resp_dept = out.get("responsible_department",
+                        out.get("responsible_authority", "")) or ""
+    if isinstance(resp_dept, list):
+        resp_dept = ", ".join(str(x) for x in resp_dept)
+    out["responsible_department"] = resp_dept
+    out.setdefault("action_type", "Judgment outcome recorded")
+    out.setdefault("appeal_timeline", "90 days (inferred)")
+    conf = out.get("_confidence") or {}
+    if not isinstance(conf, dict):
+        conf = {}
+    out["_confidence"] = conf
+    return out
+
+
+def _mock_extraction() -> dict:
+    """Hard-coded canonical S. Nagaraj payload — used when no live LLM is available."""
+    return {
         "case_title": (
             "S. Nagaraj (dead) by LRs. & Ors. v. B.R. Vasudeva Murthy & Ors."
         ),
@@ -66,9 +183,10 @@ def extract_fields(raw_text: str) -> dict:
             "Government of Karnataka, Revenue Department, "
             "Bangalore Development Authority"
         ),
+        "action_type": (
+            "Judgment outcome finalized; prior restoration/cancellation directions set aside"
+        ),
         "appeal_timeline": "90 days (inferred)",
-
-        # ── What a real LLM would return alongside the values ──────────────
         "_confidence": {
             "case_title":             99,
             "court":                  99,
@@ -79,16 +197,10 @@ def extract_fields(raw_text: str) -> dict:
             "summary":                95,
             "key_directives":         95,
             "responsible_department": 90,
+            "action_type":            92,
             "appeal_timeline":        70,
         },
     }
-
-    if raw_text and len(raw_text.strip()) >= 100:
-        print(f"  ✅  Extracted fields from live PDF text ({len(raw_text):,} chars)")
-    else:
-        print("  ℹ️   Short / empty PDF text — using canonical S. Nagaraj payload")
-
-    return fields
 
 
 def _load_fallback() -> dict:
