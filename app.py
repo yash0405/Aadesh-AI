@@ -736,7 +736,8 @@ def _accept_upload(uploaded_file, *, source: str) -> None:
 
     if prev != str(saved):
         st.toast(f"\U0001f4c4 Extracted {saved.name}", icon="\u2705")
-        st.rerun()
+        
+    st.rerun()
 
 
 with st.sidebar:
