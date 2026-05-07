@@ -736,7 +736,8 @@ def _accept_upload(uploaded_file, *, source: str) -> None:
 
     if prev != str(saved):
         st.toast(f"\U0001f4c4 Extracted {saved.name}", icon="\u2705")
-        st.rerun()
+        
+    st.rerun()
 
 
 with st.sidebar:
@@ -867,7 +868,7 @@ if judgment.get("case_title"):
 # STEP 1 — REVIEW & VERIFY
 # ════════════════════════════════════════════════════════════════════════════
 def render_step_1():
-    # ── Rejection banner ──────────────────────────────────────────────
+    # ── Rejection View (Force New Upload) ─────────────────────────────
     if st.session_state.status == "rejected":
         reason = st.session_state.reject_reason or "No reason provided."
         when   = st.session_state.rejected_at or "—"
@@ -875,18 +876,18 @@ def render_step_1():
             f"""
 <div style="background:linear-gradient(135deg,#fff0f0,#ffd9d9);
             border:2px solid var(--bad);border-left:6px solid var(--bad);
-            border-radius:10px;padding:14px 18px;margin:0 0 12px 0;
+            border-radius:10px;padding:20px;margin-bottom:24px;
             box-shadow:0 4px 14px rgba(164,24,24,.15);">
-  <div style="display:flex;align-items:center;gap:10px;">
-    <div style="font-size:1.6rem;">❌</div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div style="font-size:2rem;">❌</div>
     <div style="flex:1;">
       <div style="font-family:'Cormorant Garamond',serif;font-weight:800;
-                  font-size:1.25rem;color:var(--bad);">
-        Plan Rejected — Reset to review the original judgment again
+                  font-size:1.4rem;color:var(--bad);">
+        Extraction Rejected
       </div>
-      <div style="font-size:.8rem;color:#6b1414;margin-top:2px;">
-        <strong>Reason:</strong> {reason} &nbsp;·&nbsp;
-        <strong>Rejected at:</strong> {when}
+      <div style="font-size:.9rem;color:#6b1414;margin-top:4px;">
+        <strong>Reason for rejection:</strong> {reason}<br/>
+        <strong>Time:</strong> {when}
       </div>
     </div>
   </div>
@@ -894,12 +895,26 @@ def render_step_1():
 """,
             unsafe_allow_html=True,
         )
-        if st.button("↺ Restore as Draft", use_container_width=False,
-                     key="rej_restore"):
+        
+        st.markdown("### Please upload a clearer or corrected judgment PDF to continue:")
+        
+        # Central uploader for the rejected state
+        new_pdf = st.file_uploader(
+            "Upload corrected PDF", type=["pdf"], key="rejected_view_uploader"
+        )
+        if new_pdf is not None:
+            _accept_upload(new_pdf, source="rejected_view")
+            
+        st.markdown("---")
+        st.caption("Or alternatively, you can restore the previous draft if you want to retry editing to fix it manually.")
+        if st.button("↺ Restore previous draft instead", use_container_width=False, key="rej_restore"):
             st.session_state.status = "draft"
             st.session_state.reject_reason = ""
             st.session_state.rejected_at   = None
             st.rerun()
+            
+        # Short-circuit so we don't render the verify panel until they upload a new one
+        return
 
     col_pdf, col_edit = st.columns([1.05, 1], gap="large")
 
