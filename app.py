@@ -11,6 +11,7 @@ from pathlib import Path
 
 import utils
 from models import SourceCoord
+from pipeline import run_pipeline, result_to_ui_dict
 
 try:
     from streamlit_pdf_viewer import pdf_viewer as _pdf_viewer
@@ -20,8 +21,32 @@ except ImportError:
 
 # ── File locations ────────────────────────────────────────────────────────
 # Both source files live in data/ so the project root stays clean.
-PDF_PATH  = Path("data/SC-Judgement.pdf")
-JSON_PATH = Path("data/judgment_data.json")
+PDF_PATH    = Path("data/SC-Judgement.pdf")          # demo / fallback PDF
+JSON_PATH   = Path("data/judgment_data.json")
+UPLOAD_DIR  = Path("uploads")                          # user-uploaded PDFs
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+
+def _save_uploaded_pdf(uploaded_file) -> Path:
+    """Persist a Streamlit UploadedFile to ``uploads/`` and return its path.
+
+    The same filename is overwritten on re-upload so the folder doesn't grow
+    unbounded during a session.
+    """
+    safe_name = Path(uploaded_file.name).name        # strip any path components
+    dest = UPLOAD_DIR / safe_name
+    dest.write_bytes(uploaded_file.getbuffer())
+    return dest
+
+
+def _active_pdf_path() -> Path:
+    """Return the PDF currently shown in the viewer (uploaded > demo)."""
+    p = st.session_state.get("pdf_path")
+    if p:
+        p = Path(p)
+        if p.exists():
+            return p
+    return PDF_PATH
 
 st.set_page_config(
     layout="wide",
@@ -524,7 +549,9 @@ def load_judgment() -> dict:
         return json.load(fh)
 
 
-judgment = load_judgment()
+# When a PDF has been uploaded and processed, prefer its pipeline output;
+# otherwise fall back to the canonical demo JSON shipped in data/.
+judgment = st.session_state.get("judgment_override") or load_judgment()
 conf = judgment["confidence"]
 src  = judgment["source_highlights"]
 
@@ -579,15 +606,15 @@ def field_label(label: str, pct: int):
 # ════════════════════════════════════════════════════════════════════════════
 def _default_edits():
     return {
-        "case_title":    judgment["case_title"],
-        "court":         judgment["court"],
-        "judgment_date": judgment["judgment_date"],
-        "case_number":   judgment["case_number"],
-        "summary":       judgment["judgment_summary"],
-        "directions":    list(judgment["key_directions"]),
-        "authority":     list(judgment["responsible_authority"]),
-        "action_type":   judgment["action_type"],
-        "appeal_days":   int(judgment["appeal_timeline"]["value_days"]),
+        "case_title":    judgment.get("case_title", ""),
+        "court":         judgment.get("court", ""),
+        "judgment_date": judgment.get("judgment_date", ""),
+        "case_number":   judgment.get("case_number", ""),
+        "summary":       judgment.get("judgment_summary", ""),
+        "directions":    list(judgment.get("key_directions", []) or []),
+        "authority":     list(judgment.get("responsible_authority", []) or []),
+        "action_type":   judgment.get("action_type", ""),
+        "appeal_days":   int((judgment.get("appeal_timeline") or {}).get("value_days", 90) or 90),
     }
 
 
@@ -602,6 +629,10 @@ for k, v in {
     "step":                  1,        # 1 = review, 2 = plan, 3 = dashboard
     "reject_reason":         "",
     "rejected_at":           None,
+    "pdf_path":              None,     # uploaded PDF path; None → use demo
+    "pdf_name":              None,
+    "using_uploaded_pdf":    False,
+    "judgment_override":     None,     # pipeline output for an uploaded PDF
 }.items():
     st.session_state.setdefault(k, v)
 
@@ -639,7 +670,11 @@ def _reject_dialog():
 
 def highlight_button(field_name: str, label: str, key: str):
     """Per-field button that overlays yellow boxes on the PDF using source_coords."""
-    if not (_PDF_OK and PDF_PATH.exists()):
+    # Source coords are tied to the demo PDF; disable highlights when the user
+    # has uploaded a different document so we don't point at the wrong pages.
+    if not (_PDF_OK and _active_pdf_path().exists()) or st.session_state.get("using_uploaded_pdf"):
+        st.button("📑 —", key=key, disabled=True,
+                  help="Highlights only available for the demo judgment.")
         return
     coords = coords_map.get(field_name) or []
     if not coords:
@@ -660,12 +695,77 @@ def highlight_button(field_name: str, label: str, key: str):
 # ════════════════════════════════════════════════════════════════════════════
 # SIDEBAR / UPLOAD
 # ════════════════════════════════════════════════════════════════════════════
+def _accept_upload(uploaded_file, *, source: str) -> None:
+    """Persist the uploaded PDF, run the extraction pipeline, route the viewer."""
+    saved = _save_uploaded_pdf(uploaded_file)
+    prev = st.session_state.get("pdf_path")
+    st.session_state.pdf_path           = str(saved)
+    st.session_state.pdf_name           = saved.name
+    st.session_state.using_uploaded_pdf = True
+    # Reset any stale highlight from a previous PDF.
+    st.session_state.highlight_page        = 0
+    st.session_state.highlight_annotations = []
+    st.session_state.highlight_field       = None
+
+    # Run the full PDF → LLM extract → LLM plan pipeline.
+    using_llm = bool(__import__("os").environ.get("OPENAI_API_KEY", "").strip())
+    spinner_msg = (
+        f"Running OpenAI extraction on {saved.name} \u2026"
+        if using_llm else
+        f"Running mock extraction on {saved.name} \u2026 (set OPENAI_API_KEY for real LLM)"
+    )
+    try:
+        with st.spinner(spinner_msg):
+            result = run_pipeline(saved)
+            ui_dict = result_to_ui_dict(result)
+    except Exception as exc:
+        st.error(f"Extraction failed: {exc}")
+        return
+
+    st.session_state.judgment_override = ui_dict
+    # Force a reseed of the editable fields from the new judgment.
+    st.session_state.pop("edits", None)
+    # Reset workflow state for the new document.
+    st.session_state.status        = "draft"
+    st.session_state.final_plan    = None
+    st.session_state.published     = False
+    st.session_state.reject_reason = ""
+    st.session_state.rejected_at   = None
+    st.session_state.step          = 1
+
+    if prev != str(saved):
+        st.toast(f"\U0001f4c4 Extracted {saved.name}", icon="\u2705")
+        st.rerun()
+
+
 with st.sidebar:
-    st.markdown("### 📤 New Judgment")
-    uploaded_pdf = st.file_uploader("Upload PDF to extract", type=["pdf"])
-    if uploaded_pdf:
-        st.success("PDF Uploaded! (Extraction pipeline placeholder)")
-        # In a real impl, you'd save it and call pipeline.extract()
+    st.markdown("### \U0001f4e4 New Judgment")
+    uploaded_pdf = st.file_uploader(
+        "Upload PDF to extract", type=["pdf"], key="sidebar_pdf_uploader"
+    )
+    if uploaded_pdf is not None:
+        _accept_upload(uploaded_pdf, source="sidebar")
+
+    if st.session_state.get("using_uploaded_pdf"):
+        st.caption(f"\U0001f4c4 Active: **{st.session_state.get('pdf_name', '\u2014')}**")
+        if st.button("\u21ba Use demo PDF", use_container_width=True, key="reset_pdf"):
+            st.session_state.pdf_path           = None
+            st.session_state.pdf_name           = None
+            st.session_state.using_uploaded_pdf = False
+            st.session_state.judgment_override  = None
+            st.session_state.pop("edits", None)
+            st.session_state.highlight_page        = 0
+            st.session_state.highlight_annotations = []
+            st.session_state.highlight_field       = None
+            st.rerun()
+
+    # LLM status indicator
+    import os as _os
+    if _os.environ.get("OPENAI_API_KEY", "").strip():
+        st.caption("\U0001f7e2 OpenAI extraction active")
+    else:
+        st.caption("\U0001f7e1 Mock extraction (set `OPENAI_API_KEY` env var for real LLM)")
+
     st.markdown("---")
     st.markdown("### Settings")
     st.checkbox("Auto-scroll to highlighted text", value=True)
@@ -752,9 +852,13 @@ if judgment.get("case_title"):
         st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
         with st.popover("📤 Upload", use_container_width=True):
             st.markdown("**Extract New Judgment**")
-            new_pdf = st.file_uploader("Upload PDF", type=["pdf"], label_visibility="collapsed")
-            if new_pdf:
-                st.success("PDF Uploaded! (Placeholder for pipeline)")
+            new_pdf = st.file_uploader(
+                "Upload PDF", type=["pdf"],
+                label_visibility="collapsed",
+                key="popover_pdf_uploader",
+            )
+            if new_pdf is not None:
+                _accept_upload(new_pdf, source="popover")
     st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
 
 
@@ -798,34 +902,43 @@ def render_step_1():
 
     col_pdf, col_edit = st.columns([1.05, 1], gap="large")
 
-    # ── PDF (data/SC-Judgement.pdf) ──────────────────────────────────
+    # ── PDF (uploaded > data/SC-Judgement.pdf) ──────────────────────
     with col_pdf:
-        st.markdown('<div class="sect-title">📜 Original Judgment</div>',
+        active_pdf = _active_pdf_path()
+        is_uploaded = bool(st.session_state.get("using_uploaded_pdf"))
+        title = "📜 Uploaded Judgment" if is_uploaded else "📜 Original Judgment"
+        st.markdown(f'<div class="sect-title">{title}</div>',
                     unsafe_allow_html=True)
-        if _PDF_OK and PDF_PATH.exists():
+        if _PDF_OK and active_pdf.exists():
             # Faint gold overview when no field is selected; bright yellow
-            # on the field the user last clicked.
+            # on the field the user last clicked. Coords are tied to the demo
+            # PDF, so suppress the overview for user-uploaded documents.
             ann = st.session_state.highlight_annotations
-            if not ann:
+            if not ann and not is_uploaded:
                 ann = []
                 for c_list in coords_map.values():
                     ann.extend(utils.highlight_coords(
                         c_list, color="rgba(201,161,74,0.18)"))
             st.markdown('<div class="pdf-frame">', unsafe_allow_html=True)
+            # `key` forces the viewer to remount when the file changes, so the
+            # new PDF is fetched instead of the previous one staying cached.
             _pdf_viewer(
-                str(PDF_PATH),
+                str(active_pdf),
                 width=700, height=560,
                 pages_vertical_spacing=2,
                 scroll_to_page=st.session_state.highlight_page + 1,
                 annotations=ann,
+                key=f"pdf_viewer::{active_pdf}",
             )
             st.markdown('</div>', unsafe_allow_html=True)
             cap = f"📍 Page {st.session_state.highlight_page + 1}"
-            if st.session_state.highlight_field:
+            if is_uploaded:
+                cap += f" · **{active_pdf.name}** (uploaded)"
+            elif st.session_state.highlight_field:
                 cap += f" · highlighting **{st.session_state.highlight_field}**"
             st.caption(cap)
         elif _PDF_OK:
-            st.info(f"📂 Place **{PDF_PATH.name}** in the `data/` folder.")
+            st.info(f"📂 Place **{PDF_PATH.name}** in the `data/` folder, or upload a PDF from the sidebar.")
         else:
             st.warning("Install `streamlit-pdf-viewer` for inline PDF.")
 
