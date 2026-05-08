@@ -749,7 +749,8 @@ with st.sidebar:
         _accept_upload(uploaded_pdf, source="sidebar")
 
     if st.session_state.get("using_uploaded_pdf"):
-        st.caption(f"\U0001f4c4 Active: **{st.session_state.get('pdf_name', '\u2014')}**")
+        active_pdf_name = st.session_state.get("pdf_name") or "-"
+        st.caption(f"\U0001f4c4 Active: **{active_pdf_name}**")
         if st.button("\u21ba Use demo PDF", use_container_width=True, key="reset_pdf"):
             st.session_state.pdf_path           = None
             st.session_state.pdf_name           = None

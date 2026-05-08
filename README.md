@@ -24,6 +24,16 @@ streamlit run app.py
 
 The app opens at <http://localhost:8501>.
 
+## Lehana deployment
+
+This project is deployed on Lehana infrastructure from `/root/ideas/Aadesh-AI` with Docker config in `/root/docker/aadeshai`.
+
+- Primary public route: `https://aadeshai.aidhunik.com`
+- Demo path: `https://aadeshai.aidhunik.com/demo`
+- Mirror route: `https://aadeshai.lehana.in`
+
+The public `/demo` path is a routing alias for the same Streamlit app. The app already defaults to the bundled demo judgment when no PDF upload is active, so no separate code route is required.
+
 ---
 
 ## Project layout
